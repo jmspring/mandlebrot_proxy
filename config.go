@@ -7,18 +7,20 @@ import (
 )
 
 type Config struct {
-	ListenAddr   string
-	UpstreamPort int
-	JWTSecret    string
-	LogLevel     slog.Level
+	ListenAddr    string
+	Image         string
+	ContainerPort int
+	JWTSecret     string
+	LogLevel      slog.Level
 }
 
 func loadConfig() Config {
 	return Config{
-		ListenAddr:   env("LISTEN_ADDR", ":9090"),
-		UpstreamPort: envInt("UPSTREAM_PORT", 8080),
-		JWTSecret:    env("JWT_SECRET", "mandelbrot-dev-secret-do-not-use-in-prod"),
-		LogLevel:     parseLogLevel(env("LOG_LEVEL", "info")),
+		ListenAddr:    env("LISTEN_ADDR", ":9090"),
+		Image:         env("MANDELBROT_IMAGE", "lechgu/mandelbrot"),
+		ContainerPort: envInt("CONTAINER_PORT", 8080),
+		JWTSecret:     env("JWT_SECRET", "mandelbrot-dev-secret-do-not-use-in-prod"),
+		LogLevel:      parseLogLevel(env("LOG_LEVEL", "info")),
 	}
 }
 
