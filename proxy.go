@@ -9,8 +9,7 @@ import (
 )
 
 // builds a reverse proxy that rewrites Location headers
-// on 3xx responses so redirects route back through the proxy rather
-// than leaking the upstream address to the client.
+// on 3xx responses so redirects route back through the proxy
 func newReverseProxy(upstream *url.URL, listenAddr string) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
@@ -19,7 +18,6 @@ func newReverseProxy(upstream *url.URL, listenAddr string) *httputil.ReverseProx
 		jsonError(w, http.StatusBadGateway, "upstream unavailable")
 	}
 
-	// public facing or local?
 	proxyHost := listenAddr
 	if strings.HasPrefix(proxyHost, ":") {
 		proxyHost = "localhost" + proxyHost
@@ -32,7 +30,6 @@ func newReverseProxy(upstream *url.URL, listenAddr string) *httputil.ReverseProx
 			return nil
 		}
 
-		// Only rewrite if the Location points at our upstream.
 		upstreamOrigin := upstream.Scheme + "://" + upstream.Host
 		if strings.HasPrefix(loc, upstreamOrigin) {
 			rewritten := proxyOrigin + loc[len(upstreamOrigin):]

@@ -7,15 +7,17 @@ import (
 )
 
 type Config struct {
-	ListenAddr string
+	ListenAddr   string
 	UpstreamPort int
-	LogLevel   slog.Level
+	JWTSecret    string
+	LogLevel     slog.Level
 }
 
 func loadConfig() Config {
 	return Config{
 		ListenAddr:   env("LISTEN_ADDR", ":9090"),
 		UpstreamPort: envInt("UPSTREAM_PORT", 8080),
+		JWTSecret:    env("JWT_SECRET", "mandelbrot-dev-secret-do-not-use-in-prod"),
 		LogLevel:     parseLogLevel(env("LOG_LEVEL", "info")),
 	}
 }

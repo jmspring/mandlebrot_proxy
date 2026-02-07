@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
@@ -21,15 +20,21 @@ func main() {
 	})))
 
 	upstream, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", cfg.UpstreamPort))
-	proxy := httputil.NewSingleHostReverseProxy(upstream)
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		slog.Error("proxy", "path", r.URL.Path, "err", err)
-		jsonError(w, http.StatusBadGateway, "upstream unavailable")
-	}
+	proxy := newReverseProxy(upstream, cfg.ListenAddr)
+
+	auth := NewJWTAuth(cfg.JWTSecret)
+
+	// Log a token so operators don't have to hit /token just to test.
+	tok, _ := auth.IssueToken("dev-user", 24*time.Hour)
+	slog.Info("dev token (24h)", "token", tok)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /token", auth.HandleToken)
+	mux.Handle("/", auth.Middleware(proxy))
 
 	srv := &http.Server{
 		Addr:         cfg.ListenAddr,
-		Handler:      withLogging(proxy),
+		Handler:      withLogging(mux),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,

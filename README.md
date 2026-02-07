@@ -8,6 +8,36 @@ This project will be developed in four phases:
 
 This readme will include notes for each phase.  The most current instructions will be at the top.
 
+# Running (phase 2)
+
+Start the mandlebrot container manually:
+
+```bash
+docker run -p 8080:80 lechgu/mandelbrot
+```
+
+In the code directory (where this readme is) run:
+
+```bash
+go run .
+# grab the dev token from the startup log, or:
+TOKEN=$(curl -s -X POST http://localhost:9090/token \
+  -H "Content-Type: application/json" \
+  -d '{"subject":"demo","duration":"1h"}' | jq -r .token)
+
+curl -X POST http://localhost:9090/generate/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"width":640,"height":480,"iterations":100,"re_min":-2,"re_max":1,"im_min":-1,"im_max":1,"kind":"png"}' \
+  -o mandelbrot.png
+
+# without auth:
+curl -s http://localhost:9090/generate/
+# {"error":"missing Authorization header"}
+```
+
+
+
 # Running (phase 1)
 
 Start the mandlebrot container manually:
