@@ -1,0 +1,50 @@
+package main
+
+import (
+	"log/slog"
+	"os"
+	"strconv"
+)
+
+type Config struct {
+	ListenAddr string
+	UpstreamPort int
+	LogLevel   slog.Level
+}
+
+func loadConfig() Config {
+	return Config{
+		ListenAddr:   env("LISTEN_ADDR", ":9090"),
+		UpstreamPort: envInt("UPSTREAM_PORT", 8080),
+		LogLevel:     parseLogLevel(env("LOG_LEVEL", "info")),
+	}
+}
+
+func env(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
+func parseLogLevel(s string) slog.Level {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
