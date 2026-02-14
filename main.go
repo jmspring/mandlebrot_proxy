@@ -58,7 +58,7 @@ func main() {
 	slog.Info("dev token (24h)", "token", tok)
 
 	upstream, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", cfg.ContainerPort))
-	proxy := newReverseProxy(upstream, cfg.ListenAddr)
+	proxy := newReverseProxy(upstream)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /token", auth.HandleToken)

@@ -13,7 +13,7 @@ import (
 func testProxy(t *testing.T, backend *httptest.Server) http.Handler {
 	t.Helper()
 	u, _ := url.Parse(backend.URL)
-	return withLogging(newReverseProxy(u, ":9090"))
+	return withLogging(newReverseProxy(u))
 }
 
 func TestProxy_Forwards(t *testing.T) {
@@ -83,104 +83,84 @@ func TestProxy_PreservesHeaders(t *testing.T) {
 	}
 }
 
-func TestProxy_307Redirect(t *testing.T) {
-	var backendURL string
+func TestProxy_FollowsRedirect(t *testing.T) {
+	// follow 307 internally
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/old" {
-			// Upstream redirects with its own absolute URL — this is what
-			// we need to rewrite. Many frameworks do this.
-			w.Header().Set("Location", backendURL+"/new")
-			w.WriteHeader(http.StatusTemporaryRedirect)
-			return
+		switch r.URL.Path {
+		case "/old":
+			http.Redirect(w, r, "/new", http.StatusTemporaryRedirect)
+		case "/new":
+			w.Write([]byte("landed"))
+		default:
+			http.NotFound(w, r)
 		}
-		w.Write([]byte("landed"))
-	}))
-	defer backend.Close()
-	backendURL = backend.URL
-
-	u, _ := url.Parse(backend.URL)
-	proxy := newReverseProxy(u, ":9090")
-
-	req := httptest.NewRequest("GET", "/old", nil)
-	rec := httptest.NewRecorder()
-	proxy.ServeHTTP(rec, req)
-
-	if rec.Code != 307 {
-		t.Fatalf("status = %d, want 307", rec.Code)
-	}
-
-	loc := rec.Header().Get("Location")
-	if strings.Contains(loc, backend.URL) {
-		t.Errorf("Location still points at upstream: %q", loc)
-	}
-	if !strings.Contains(loc, "/new") {
-		t.Errorf("Location missing path: %q", loc)
-	}
-	if !strings.HasPrefix(loc, "http://localhost:9090") {
-		t.Errorf("Location not rewritten to proxy: %q", loc)
-	}
-}
-
-func TestProxy_RedirectPreservesExternalLocations(t *testing.T) {
-	// Redirects to a different host should be left alone.
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Location", "https://example.com/somewhere")
-		w.WriteHeader(http.StatusTemporaryRedirect)
-	}))
-	defer backend.Close()
-
-	u, _ := url.Parse(backend.URL)
-	proxy := newReverseProxy(u, ":9090")
-
-	req := httptest.NewRequest("GET", "/", nil)
-	rec := httptest.NewRecorder()
-	proxy.ServeHTTP(rec, req)
-
-	loc := rec.Header().Get("Location")
-	if loc != "https://example.com/somewhere" {
-		t.Errorf("external Location was mangled: %q", loc)
-	}
-}
-
-func TestProxy_NonRedirectNoRewrite(t *testing.T) {
-	// 200 with a Location header (weird but valid) shouldn't break.
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Location", "http://whatever")
-		w.WriteHeader(200)
-		w.Write([]byte("ok"))
 	}))
 	defer backend.Close()
 
 	handler := testProxy(t, backend)
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest("GET", "/old", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// client should not see redirect
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200 (redirect not followed?)", rec.Code)
+	}
+	if rec.Body.String() != "landed" {
+		t.Errorf("body = %q, want 'landed'", rec.Body.String())
+	}
+}
+
+func TestProxy_FollowsRedirectChain(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/a":
+			http.Redirect(w, r, "/b", http.StatusFound)
+		case "/b":
+			http.Redirect(w, r, "/c", http.StatusTemporaryRedirect)
+		case "/c":
+			w.Write([]byte("final"))
+		}
+	}))
+	defer backend.Close()
+
+	handler := testProxy(t, backend)
+	req := httptest.NewRequest("GET", "/a", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != 200 {
 		t.Fatalf("status = %d", rec.Code)
 	}
+	if rec.Body.String() != "final" {
+		t.Errorf("body = %q", rec.Body.String())
+	}
 }
 
-func TestProxy_RelativeRedirectPassesThrough(t *testing.T) {
-	// Relative Location paths are already safe — the browser resolves
-	// them against the proxy URL. Make sure we don't mangle them.
+func TestProxy_TrailingSlashRedirect(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/new", http.StatusTemporaryRedirect)
+		switch r.URL.Path {
+		case "/generate":
+			loc := "http://" + r.Host + "/generate/"
+			w.Header().Set("Location", loc)
+			w.WriteHeader(http.StatusTemporaryRedirect)
+		case "/generate/":
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte("PNGDATA"))
+		}
 	}))
 	defer backend.Close()
 
-	u, _ := url.Parse(backend.URL)
-	proxy := newReverseProxy(u, ":9090")
-
-	req := httptest.NewRequest("GET", "/old", nil)
+	handler := testProxy(t, backend)
+	req := httptest.NewRequest("POST", "/generate", strings.NewReader(`{"width":640}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	proxy.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 
-	if rec.Code != 307 {
-		t.Fatalf("status = %d, want 307", rec.Code)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200 (trailing-slash redirect not followed?)", rec.Code)
 	}
-	loc := rec.Header().Get("Location")
-	if loc != "/new" {
-		t.Errorf("relative Location mangled: %q", loc)
+	if rec.Body.String() != "PNGDATA" {
+		t.Errorf("body = %q", rec.Body.String())
 	}
 }

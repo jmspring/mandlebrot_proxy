@@ -29,7 +29,7 @@ func newTestStack(t *testing.T) (*httptest.Server, *JWTAuth) {
 
 	auth := NewJWTAuth(testSecret)
 	u, _ := url.Parse(backend.URL)
-	proxy := newReverseProxy(u, ":0") // port irrelevant for these tests
+	proxy := newReverseProxy(u)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /token", auth.HandleToken)
