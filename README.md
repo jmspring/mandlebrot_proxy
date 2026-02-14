@@ -10,11 +10,11 @@ This readme will include notes for each phase.  The most current instructions wi
 
 It was chosen to use the go Docker sdk rather than shelling to keep better control over / clean up of the process management.  
 
-This code was tested on Archi Linux with Docker and MacOS w/ OrbStack (a Docker drop in).
+This code was tested on Void Linux with Docker and MacOS w/ OrbStack (a Docker drop in).
 
 # Running
 
-There is now a Makefile.  Running the project is outlined below.  Note, per the original document, the mandlebrot docker image returns a 317 when there isn't a trailing slash on the url for `generate/`.  So, that has been added here.
+There is now a Makefile.  Running the project is outlined below.  Note, per the original document, the mandlebrot docker image returns a 317 when there isn't a trailing slash on the url for `generate/`.  So, that has been added here.  The other option is to add -L in `curl` (or whichever your client uses) to follow the redirect.
 
 The instructions to run - 
 
